@@ -59,7 +59,7 @@ Snap! (control) ──[MQTT: imrun]──► Insight Maker (simulació)
 ### Pendent ⬜
 - [ ] Muntar el **bucle d'escenaris** (vegeu secció 3)
 - [ ] Executar tots els escenaris i omplir el full G11C
-- [x] Visualització: gràfics a Sheets i/o dashboard HTML (implementat via dashboard HTML)
+- [R] Visualització: gràfics a Sheets i/o dashboard HTML (implementat via dashboard HTML), queda conectar-lo
 - [ ] **Exportar** el projecte Snap! definitiu → `SIM_LAB05_G11C.xml`
 - [ ] Redactar el **document breu** amb captures de pantalla
 - [ ] Empaquetar el lliurament en `.zip` (xml + doc + extres)
@@ -157,7 +157,7 @@ o afegeix una columna amb el nom del paràmetre.)
 ## 3b. Visualització / Dashboard (PENDENT — apuntat per fer)
 
 Un cop el full G11C tingui dades dels escenaris, muntar la capa de visualització.
-Estat actual: **Opció C implementada** amb el fitxer autònom [dashboard.html](dashboard.html).
+Estat actual: **Opció C implementada** amb el fitxer autònom [dashboard.html](dashboard.html). Encara queda conectar be, ja que està tot hardcodejat.
 
 Opcions (de menys a més vistosa):
 
