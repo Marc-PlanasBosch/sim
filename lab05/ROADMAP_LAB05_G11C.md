@@ -80,33 +80,39 @@ Snap! (control) ──[MQTT: imrun]──► Insight Maker (simulació)
 3. Comprovar que la variable **`url sheet call`** conté la URL `/exec` de l'Apps Script
    (`https://script.google.com/macros/s/AKfycby8.../exec`).
 
-### Pas 1 — Crear les variables
-Paleta **Variables → "Make a variable"**: crear `fila`, `Nstar`, `Estar`, `Cstar`.
+### Pas 1 — Variables ja creades
+Les variables del bucle ja estan creades al Snap: `fila`, `Nstar`, `Estar`, `Cstar`, `escenaris`, `nom_param` i `llista_valors`.
+
+- `escenaris`: llista dels escenaris a executar
+- `nom_param`: nom del paràmetre actiu dins de cada escenari
+- `llista_valors`: valors del paràmetre que es recorreran al bucle
 
 ### Pas 2 — Muntar el bucle
 
 ```
 connect insight channel [g11c]
 set [fila] to (2)
-for each (v) in (list 0.005 0.01)        ← de moment 2 valors per provar
-    InsightMaker run ( join [setValue(findName('q'), ] (v) [)] )
-    run model silent
-    wait (3) secs
-    set [Nstar] to ( item (last) of ( split (get [N] values) by , ) )
-    set [Estar] to ( item (last) of ( split (get [E] values) by , ) )
-    set [Cstar] to ( item (last) of ( split (get [Captura] values) by , ) )
-    set sheet url (url sheet call) name [G11C] column [A] row num (fila) value [q]
-    set sheet url (url sheet call) name [G11C] column [B] row num (fila) value (v)
-    set sheet url (url sheet call) name [G11C] column [C] row num (fila) value (Nstar)
-    set sheet url (url sheet call) name [G11C] column [D] row num (fila) value (Estar)
-    set sheet url (url sheet call) name [G11C] column [E] row num (fila) value (Cstar)
-    change [fila] by (1)
+for each (nom_param) in (escenaris)
+      set [llista_valors] to (...)          ← assigna aquí la llista de valors de l'escenari actual
+      for each (v) in (llista_valors)
+            InsightMaker run ( join [setValue(findName(] (nom_param) [), ] (v) [)] )
+            run model silent
+            wait (3) secs
+            set [Nstar] to ( item (last) of ( split (get [N] values) by , ) )
+            set [Estar] to ( item (last) of ( split (get [E] values) by , ) )
+            set [Cstar] to ( item (last) of ( split (get [Captura] values) by , ) )
+            set sheet url (url sheet call) name [G11C] column [A] row num (fila) value (nom_param)
+            set sheet url (url sheet call) name [G11C] column [B] row num (fila) value (v)
+            set sheet url (url sheet call) name [G11C] column [C] row num (fila) value (Nstar)
+            set sheet url (url sheet call) name [G11C] column [D] row num (fila) value (Estar)
+            set sheet url (url sheet call) name [G11C] column [E] row num (fila) value (Cstar)
+            change [fila] by (1)
 ```
 
 **Notes de muntatge (on és cada bloc):**
-- `for each (item) in ( )` → **Control**. Clica "item" i reanomena'l `v`.
-- `list` → **Variables** (afegeix ranures amb les fletxes ◄►).
-- `join` → **Operators**, amb **3 trossos**: text `setValue(findName('q'), ` · variable `v` · text `)`.
+- `for each (item) in ( )` → **Control**. Fes servir el primer per recórrer `escenaris` i el segon per recórrer `llista_valors`.
+- `list` → **Variables** o blocs d'inicialització equivalents, segons com tinguis guardades les llistes.
+- `join` → **Operators**, amb **3 trossos**: text `setValue(findName(` · variable `nom_param` · text `), ` i després el valor `v`.
 - `split … by ,` → **Operators** (escriu la coma a la 2a ranura).
 - `item (1) of` → **Variables**; posa el desplegable a **`last`**.
 - `connect insight channel`, `run model silent`, `get … values`, `InsightMaker run`
