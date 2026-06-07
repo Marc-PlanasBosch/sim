@@ -49,11 +49,12 @@ Snap! (control) ──[MQTT: imrun]──► Insight Maker (simulació)
 - [x] Confirmats els noms reals de variables i paràmetres del model
 
 ### En curs ⏳
-- [ ] **Validar control remot de paràmetres** — provar ordre estricte:
-      `InsightMaker run (setVar('q', …))` → `run model silent` (esperar 2-3 s) → llegir N.
-      *(si `setVar` no funciona, revisar el codi del botó "Activate" per la sintaxi correcta)*
-- [ ] **Validar escriptura a Sheets** — `set sheet … name G11C column A row 1 value [prova]`
-      i comprovar que apareix a la cel·la A1 del full G11C.
+- [x] **Control remot de paràmetres VALIDAT** — sintaxi correcta:
+      `InsightMaker run ( setValue(findName('q'), 0.005) )` → `run model silent` → esperar → llegir N.
+      ⚠️ **`setVar(...)` NO funciona** en aquest model; cal **`setValue(findName('nom'), valor)`**.
+- [x] **Escriptura a Sheets VALIDADA** — `set sheet url (url sheet call) name [G11C] column A row 1 value [prova]`.
+      ⚠️ Cal usar la variable **`url sheet call`** (la URL `/exec` de l'Apps Script),
+      **NO** `url sheet document` (la URL de docs.google.com no escriu res).
 
 ### Pendent ⬜
 - [ ] Muntar el **bucle d'escenaris** (vegeu secció 3)
@@ -65,25 +66,32 @@ Snap! (control) ──[MQTT: imrun]──► Insight Maker (simulació)
 
 ---
 
-## 3. Bucle d'escenaris (versió inicial)
+## 3. Bucle d'escenaris — GUIA PAS A PAS
 
-Pseudocodi de blocs d'Snap!. Cal crear abans les variables: `fila`, `Nstar`, `Estar`, `Cstar`.
+> ✅ La cadena està 100% validada (connexió MQTT, control remot de paràmetres i
+> escriptura a Sheets funcionen). Aquí teniu com muntar i executar el bucle.
+> Es construeix a l'sprite **`Sim`**.
+
+### Requisits previs (cada sessió de treball)
+1. Obrir el projecte Snap!: **File → Import** del nostre `SIM_LAB05_G11C.xml`
+   (⚠️ NO obrir el link del professor, que carrega l'original i perd els canvis).
+2. Obrir el model d'Insight Maker en una altra pestanya i clicar el botó **"Activate"**
+   → confirmar canal `g11c` → ha de sortir "Campana digital habilitada".
+3. Comprovar que la variable **`url sheet call`** conté la URL `/exec` de l'Apps Script
+   (`https://script.google.com/macros/s/AKfycby8.../exec`).
+
+### Pas 1 — Crear les variables
+Paleta **Variables → "Make a variable"**: crear `fila`, `Nstar`, `Estar`, `Cstar`.
+
+### Pas 2 — Muntar el bucle
 
 ```
 connect insight channel [g11c]
-
-// capçalera (un cop)
-set sheet url (url sheet call) name [G11C] column [A] row num [1] value [Parametre]
-set sheet url (url sheet call) name [G11C] column [B] row num [1] value [Valor]
-set sheet url (url sheet call) name [G11C] column [C] row num [1] value [N*]
-set sheet url (url sheet call) name [G11C] column [D] row num [1] value [E*]
-set sheet url (url sheet call) name [G11C] column [E] row num [1] value [Captura*]
-
 set [fila] to (2)
-for each (v) in (list 0.003 0.006 0.01 0.02 0.05)        // valors de q
-    InsightMaker run ( join [setVar('q', ] (v) [)] )      // canvia paràmetre
-    run model silent                                      // simula
-    wait 2 secs                                           // espera resposta MQTT
+for each (v) in (list 0.005 0.01)        ← de moment 2 valors per provar
+    InsightMaker run ( join [setValue(findName('q'), ] (v) [)] )
+    run model silent
+    wait (3) secs
     set [Nstar] to ( item (last) of ( split (get [N] values) by , ) )
     set [Estar] to ( item (last) of ( split (get [E] values) by , ) )
     set [Cstar] to ( item (last) of ( split (get [Captura] values) by , ) )
@@ -95,16 +103,48 @@ for each (v) in (list 0.003 0.006 0.01 0.02 0.05)        // valors de q
     change [fila] by (1)
 ```
 
-Per als altres escenaris, només cal canviar la `list` de valors i el nom del paràmetre dins de `setVar`:
+**Notes de muntatge (on és cada bloc):**
+- `for each (item) in ( )` → **Control**. Clica "item" i reanomena'l `v`.
+- `list` → **Variables** (afegeix ranures amb les fletxes ◄►).
+- `join` → **Operators**, amb **3 trossos**: text `setValue(findName('q'), ` · variable `v` · text `)`.
+- `split … by ,` → **Operators** (escriu la coma a la 2a ranura).
+- `item (1) of` → **Variables**; posa el desplegable a **`last`**.
+- `connect insight channel`, `run model silent`, `get … values`, `InsightMaker run`
+  → categoria **"Cicle de l'aigua"**.
+- `set sheet url …` → categoria **"Google Sheets"**. ⚠️ USAR SEMPRE `url sheet call`
+  (NO `url sheet document`, que no escriu res).
 
-| Escenari | Paràmetre | Valors a provar |
+### Pas 3 — Provar amb 2 valors i COMPROVAR
+Amb el model actiu, clica el bloc sencer (a partir de `connect…`). Espera ~10 s.
+Al full **G11C** han d'aparèixer 2 files:
+
+| fila | A | B | C (N*) | D (E*) | E (Captura*) |
+|---|---|---|---|---|---|
+| 2 | q | 0.005 | ~800 | … | … |
+| 3 | q | 0.01 | ~600 | … | … |
+
+✔️ Si surten les 2 files amb números coherents → el bucle funciona.
+✖️ Si una fila surt buida → augmenta el `wait` (la simulació no havia acabat de respondre).
+
+### Pas 4 — Escenari complet (q)
+Canvia la `list` als 5 valors reals: `0.003 0.006 0.01 0.02 0.05` i torna a executar.
+
+### Pas 5 — Resta d'escenaris
+Per a cada escenari, canvia NOMÉS dues coses: el nom dins de `findName('...')` i la `list`.
+(Opcional: ajusta `set [fila] to (...)` perquè cada escenari escrigui en files diferents,
+o afegeix una columna amb el nom del paràmetre.)
+
+| Escenari | `findName('…')` | `list` de valors |
 |---|---|---|
-| Sensibilitat α | `alpha` | 0.01, 0.1, 0.5, 1.0 |
-| Sensibilitat c | `c` | 10, 30, 50, 80 |
-| Sensibilitat q | `q` | 0.003, 0.006, 0.01, 0.02, 0.05 |
-| Regulació TAC | `Q_max` | 80, 100, 125, 200 |
-| Reserva marina | `f` | 0, 0.3, 0.4, 0.5 |
-| Efecte Allee | `A` | 0, 100, 200, 350 |
+| Sensibilitat α | `alpha` | 0.01 0.1 0.5 1.0 |
+| Sensibilitat c | `c` | 10 30 50 80 |
+| Sensibilitat q | `q` | 0.003 0.006 0.01 0.02 0.05 |
+| Regulació TAC | `Q_max` | 80 100 125 200 |
+| Reserva marina | `f` | 0 0.3 0.4 0.5 |
+| Efecte Allee | `A` | 0 100 200 350 |
+
+> 💡 Capçalera (opcional, un cop): escriure a la fila 1 els títols
+> `Parametre | Valor | N* | E* | Captura*` amb 5 blocs `set sheet … row num [1]`.
 
 ---
 
