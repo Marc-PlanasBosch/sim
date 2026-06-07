@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemell Digital - Grup 11C</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <header class="border-b border-gray-850 bg-gray-950 p-6 shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-emerald-400">Gemell Digital · Pesquera Schaefer-Smith</h1>
+                <p class="text-sm text-gray-400 mt-1">Simulació 2025-26 · UPC · Grup 11C</p>
+            </div>
+            <span class="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold animate-pulse">
+                Connectat a Google Sheets
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 space-y-6">
+        <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 shadow-sm flex flex-wrap gap-2" id="tabContainer">
+            </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-sm">
+                <h3 class="text-gray-400 text-sm font-medium">Biomassa d'Equilibri Mitjana (N*)</h3>
+                <p class="text-3xl font-bold text-blue-400 mt-2" id="kpi-n">-</p>
+            </div>
+            <div class="bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-sm">
+                <h3 class="text-gray-400 text-sm font-medium">Esforç d'Equilibri Mitjà (E*)</h3>
+                <p class="text-3xl font-bold text-amber-400 mt-2" id="kpi-e">-</p>
+            </div>
+            <div class="bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-sm">
+                <h3 class="text-gray-400 text-sm font-medium">Captura d'Equilibri Màxima</h3>
+                <p class="text-3xl font-bold text-rose-400 mt-2" id="kpi-c">-</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-200 mb-4">Evolució de Biomassa (N*) i Esforç (E*)</h3>
+                <div class="h-80"><canvas id="chartBiomassa"></canvas></div>
+            </div>
+            <div class="bg-gray-950 p-6 rounded-xl border border-gray-800 shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-200 mb-4">Rendiment de la Captura (Captura*)</h3>
+                <div class="h-80"><canvas id="chartCaptura"></canvas></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. DADES DE MOSTRA (Substitueix-ho per la teva crida de Google Sheets si implementes el GET)
+        const dadesEscenaris = {
+            "Sensibilitat q": [
+                { valor: 0.003, n: 850, e: 45, captura: 114.7 },
+                { valor: 0.006, n: 720, e: 60, captura: 259.2 },
+                { valor: 0.01,  n: 600, e: 80, captura: 480.0 },
+                { valor: 0.02,  n: 410, e: 110, captura: 902.0 },
+                { valor: 0.05,  n: 180, e: 140, captura: 1260.0 }
+            ],
+            "Sensibilitat alpha": [
+                { valor: 0.01, n: 590, e: 75, captura: 442.5 },
+                { valor: 0.1,  n: 600, e: 80, captura: 480.0 },
+                { valor: 0.5,  n: 610, e: 85, captura: 518.5 },
+                { valor: 1.0,  n: 620, e: 90, captura: 558.0 }
+            ],
+            "Regulació TAC (Q_max)": [
+                { valor: 80,  n: 650, e: 40, captura: 80.0 },
+                { valor: 100, n: 630, e: 50, captura: 100.0 },
+                { valor: 125, n: 610, e: 62, captura: 125.0 },
+                { valor: 200, n: 550, e: 95, captura: 200.0 }
+            ]
+        };
+
+        let activeTab = Object.keys(dadesEscenaris)[0];
+        let chart1, chart2;
+
+        // 2. Inicialització de Pestanyes
+        const tabContainer = document.getElementById('tabContainer');
+        Object.keys(dadesEscenaris).forEach(escenari => {
+            const btn = document.createElement('button');
+            btn.innerText = escenari;
+            btn.className = `px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                escenari === activeTab ? 'bg-emerald-500 text-gray-950 font-semibold' : 'bg-gray-900 text-gray-400 hover:bg-gray-800'
+            }`;
+            btn.onclick = () => {
+                document.querySelectorAll('#tabContainer button').forEach(b => b.className = b.className.replace('bg-emerald-500 text-gray-950 font-semibold', 'bg-gray-900 text-gray-400 hover:bg-gray-800'));
+                btn.className = 'px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-500 text-gray-950 transition-all cursor-pointer';
+                activeTab = escenari;
+                actualitzarDashboard();
+            };
+            tabContainer.appendChild(btn);
+        });
+
+        // 3. Lògica d'actualització de gràfics
+        function actualitzarDashboard() {
+            const dades = dadesEscenaris[activeTab];
+            const labels = dades.map(d => d.valor);
+
+            // Actualitzar KPIs
+            const avgN = (dades.reduce((acc, d) => acc + d.n, 0) / dades.length).toFixed(1);
+            const avgE = (dades.reduce((acc, d) => acc + d.e, 0) / dades.length).toFixed(1);
+            const maxC = Math.max(...dades.map(d => d.captura)).toFixed(1);
+
+            document.getElementById('kpi-n').innerText = avgN;
+            document.getElementById('kpi-e').innerText = avgE;
+            document.getElementById('kpi-c').innerText = maxC;
+
+            // Destruir gràfics vells si existeixen per evitar duplicats en renderitzar
+            if(chart1) chart1.destroy();
+            if(chart2) chart2.destroy();
+
+            // Gràfic 1: N* i E*
+            const ctx1 = document.getElementById('chartBiomassa').getContext('2d');
+            chart1 = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Biomassa (N*)', data: dades.map(d => d.n), borderColor: '#60a5fa', backgroundColor: '#60a5fa33', yAxisID: 'y' },
+                        { label: 'Esforç (E*)', data: dades.map(d => d.e), borderColor: '#fbbf24', backgroundColor: '#fbbf2433', yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#222' } },
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Biomassa' }, grid: { color: '#222' } },
+                        y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Esforç' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            // Gràfic 2: Captura*
+            const ctx2 = document.getElementById('chartCaptura').getContext('2d');
+            chart2 = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{ label: 'Captura*', data: dades.map(d => d.captura), backgroundColor: '#f43f5e99', borderColor: '#f43f5e', borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { grid: { color: '#222' } }, y: { grid: { color: '#222' } } }
+                }
+            });
+        }
+
+        // Render inicial
+        actualitzarDashboard();
+    </script>
+</body>
+</html>

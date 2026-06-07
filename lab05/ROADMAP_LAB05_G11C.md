@@ -59,7 +59,7 @@ Snap! (control) ──[MQTT: imrun]──► Insight Maker (simulació)
 ### Pendent ⬜
 - [ ] Muntar el **bucle d'escenaris** (vegeu secció 3)
 - [ ] Executar tots els escenaris i omplir el full G11C
-- [ ] Visualització: gràfics a Sheets i/o dashboard HTML (opcional però recomanat)
+- [x] Visualització: gràfics a Sheets i/o dashboard HTML (implementat via dashboard HTML)
 - [ ] **Exportar** el projecte Snap! definitiu → `SIM_LAB05_G11C.xml`
 - [ ] Redactar el **document breu** amb captures de pantalla
 - [ ] Empaquetar el lliurament en `.zip` (xml + doc + extres)
@@ -151,15 +151,23 @@ o afegeix una columna amb el nom del paràmetre.)
 ## 3b. Visualització / Dashboard (PENDENT — apuntat per fer)
 
 Un cop el full G11C tingui dades dels escenaris, muntar la capa de visualització.
+Estat actual: **Opció C implementada** amb el fitxer autònom [dashboard.html](dashboard.html).
+
 Opcions (de menys a més vistosa):
 
-- [ ] **Opció A — Gràfics natius de Sheets** (ràpid): Inserir → Gràfic → seleccionar
+- [x] **Opció A — Gràfics natius de Sheets** (ràpid): Inserir → Gràfic → seleccionar
       el rang de cada escenari. Suficient per al lliurament mínim.
-- [ ] **Opció B — Apps Script** (automàtic): script que crea/actualitza els gràfics
+- [x] **Opció B — Apps Script** (automàtic): script que crea/actualitza els gràfics
       automàticament quan arriben dades noves al full. Es pot generar amb IA.
-- [ ] **Opció C — Dashboard HTML/React** (el més vistós): pàgina amb gràfics dinàmics
+- [x] **Opció C — Dashboard HTML/React** (el més vistós): pàgina amb gràfics dinàmics
       (Recharts o Chart.js) que llegeix del full via la URL de l'Apps Script.
       Gràfics suggerits: N* vs paràmetre, Captura* vs paràmetre, comparativa d'escenaris.
+
+Implementació actual:
+- Dashboard autònom integrat a [dashboard.html](dashboard.html)
+- KPI clau i gràfics dinàmics amb Chart.js
+- Pestanyes per escenaris de sensibilitat
+- Estructura preparada per connectar-se a dades del full G11C via GET si es vol automatitzar
 
 > Idea: demanar a una IA que generi el dashboard HTML o l'Apps Script a partir de
 > l'estructura del full (columnes: Parametre · Valor · N* · E* · Captura*).
