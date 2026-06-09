@@ -198,3 +198,11 @@ Implementació actual:
 - El model d'Insight Maker ha d'estar **obert en una pestanya amb "Activate" clicat**
   mentre Snap! envia ordres (Insight Maker no és un servidor).
 - Després de `setVar` cal **tornar a fer `run model silent`** i esperar abans de llegir.
+
+
+
+
+
+
+
+LINK Excel: https://docs.google.com/spreadsheets/d/17cowZNht7jDMOyQmspHxtS7xQ7Yh7EnD39UOF1pBJdI/edit?usp=sharing
