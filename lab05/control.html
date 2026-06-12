@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemell Digital G11C — Sala de control</title>
+  <style>
+    :root { --gutter: 8px; --minPane: 220px; }
+    html, body { height: 100%; margin: 0; background: #0a0f0d; }
+    .split {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 62% var(--gutter) auto;
+      overflow: hidden;
+      user-select: none;
+    }
+    .pane { overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: 0; }
+    .divider {
+      cursor: col-resize;
+      background: #111916;
+      position: relative;
+      touch-action: none;
+    }
+    .divider::after {
+      content: "";
+      position: absolute; left: 50%; top: 0;
+      transform: translateX(-50%);
+      width: 2px; height: 100%;
+      background: #00e5a0; opacity: .5;
+    }
+    .dragging { cursor: col-resize; }
+    .dragging iframe { pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="split" id="split">
+    <div class="pane">
+      <!-- Snap!: un cop obert, File -> Import del nostre SIM_LAB05_G11C.xml -->
+      <iframe src="https://snap.berkeley.edu/snap/snap.html" allow="clipboard-read; clipboard-write"></iframe>
+    </div>
+    <div class="divider" id="divider" aria-label="Separador"></div>
+    <div class="pane">
+      <iframe src="dashboard.html?mqtt=auto"></iframe>
+    </div>
+  </div>
+
+  <script>
+    const split = document.getElementById('split');
+    const divider = document.getElementById('divider');
+    const gutter = 8, minPane = 220;
+    let dragging = false;
+
+    function setColumns(clientX) {
+      const rect = split.getBoundingClientRect();
+      let x = Math.max(minPane, Math.min(rect.width - minPane - gutter, clientX - rect.left));
+      split.style.gridTemplateColumns = `${x}px ${gutter}px auto`;
+    }
+    function onDown(e) {
+      dragging = true;
+      document.body.classList.add('dragging');
+      setColumns((e.touches ? e.touches[0] : e).clientX);
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      setColumns((e.touches ? e.touches[0] : e).clientX);
+      e.preventDefault();
+    }
+    function onUp() { dragging = false; document.body.classList.remove('dragging'); }
+
+    divider.addEventListener('mousedown', onDown);
+    divider.addEventListener('touchstart', onDown, { passive: false });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+  </script>
+</body>
+</html>

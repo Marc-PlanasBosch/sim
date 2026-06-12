@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gemell Digital · Pesquera Schaefer-Smith · G11C</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
   <style>
     /* ── Token system ────────────────────────────────────────────────────── */
     :root {
@@ -227,6 +228,84 @@
       font-size: 12px;
     }
 
+    /* ── Telemetria en directe (MQTT) ────────────────────────────────────── */
+    .live-section {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .live-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .live-title {
+      font-size: 12px; font-family: var(--font-mono); color: var(--dim);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .live-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .live-controls input {
+      font-family: var(--font-mono); font-size: 11px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 5px 10px;
+    }
+    .live-controls input:focus { outline: none; border-color: var(--accent); }
+    #mqtt-canal { width: 70px; }
+    #mqtt-broker { width: 230px; }
+    .btn {
+      font-family: var(--font-mono); font-size: 11px;
+      padding: 5px 14px; border-radius: 4px; cursor: pointer;
+      background: transparent; border: 1px solid var(--border); color: var(--dim);
+      transition: all .15s;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn.primary { border-color: var(--accent); color: var(--accent); }
+    #mqtt-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted); display: inline-block; margin-right: 6px;
+      transition: background .4s;
+    }
+    #mqtt-dot.ok { background: var(--accent); }
+    #mqtt-dot.err { background: var(--rose); }
+    #mqtt-dot.load { background: var(--amber); animation: blink 0.8s step-end infinite; }
+    #mqtt-estat { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+    .escenari-chip {
+      font-family: var(--font-mono); font-size: 11px;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 4px 12px; color: var(--amber);
+    }
+    .live-body {
+      display: grid; grid-template-columns: 3fr 2fr; gap: 0;
+    }
+    @media (max-width: 720px) { .live-body { grid-template-columns: 1fr; } }
+    .live-chart-wrap { padding: 16px 20px; height: 280px; position: relative; }
+    .live-log {
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .live-log-head {
+      padding: 10px 16px;
+      font-size: 11px; font-family: var(--font-mono); color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between;
+    }
+    #mqtt-log {
+      font-family: var(--font-mono); font-size: 10px; line-height: 1.7;
+      color: var(--dim);
+      padding: 10px 16px; margin: 0;
+      overflow-y: auto; max-height: 230px;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    #mqtt-log .t-run { color: var(--blue); }
+    #mqtt-log .t-resp { color: var(--accent); }
+    #mqtt-log .t-info { color: var(--muted); }
+
     /* ── Refresh button ──────────────────────────────────────────────────── */
     #refresh-btn {
       font-family: var(--font-mono);
@@ -265,6 +344,32 @@
 </div>
 
 <main>
+  <!-- ── Telemetria en directe via MQTT ──────────────────────────────────── -->
+  <section class="live-section">
+    <div class="live-head">
+      <div class="live-title">Telemetria en directe — canal MQTT</div>
+      <div class="live-controls">
+        <span id="escenari-chip" class="escenari-chip" style="display:none"></span>
+        <input id="mqtt-broker" value="wss://broker.emqx.io:8084/mqtt" title="Broker WebSocket">
+        <input id="mqtt-canal" value="g11c" title="Canal del grup">
+        <button id="mqtt-connect" class="btn primary" onclick="mqttConnecta()">Connecta</button>
+        <button id="mqtt-disconnect" class="btn" onclick="mqttDesconnecta()" disabled>Desconnecta</button>
+        <button id="mqtt-clear" class="btn" onclick="liveNeteja()">Neteja</button>
+        <span><span id="mqtt-dot"></span><span id="mqtt-estat">desconnectat</span></span>
+      </div>
+    </div>
+    <div class="live-body">
+      <div class="live-chart-wrap"><canvas id="chart-live"></canvas></div>
+      <div class="live-log">
+        <div class="live-log-head">
+          <span>Registre d'esdeveniments</span>
+          <span id="mqtt-count">0 missatges</span>
+        </div>
+        <pre id="mqtt-log"></pre>
+      </div>
+    </div>
+  </section>
+
   <div id="tab-bar"></div>
 
   <div class="kpi-strip">
@@ -547,8 +652,180 @@ function actualitzarTaula(dades, params) {
   document.getElementById('table-wrap').innerHTML = html;
 }
 
+// ═══ TELEMETRIA EN DIRECTE (MQTT) ═══════════════════════════════════════════
+// Protocol del gemell digital (mateix que usa Snap!):
+//   name/<canal>/imrun  — ordres JS que Snap! envia a InsightMaker
+//   name/<canal>/imresp — respostes: 'done' en acabar una simulació, i les
+//                         sèries (valors separats per comes) després de cada
+//                         petició window.imres.value(findName('X'))
+// Escoltant els DOS topics sabem quina variable correspon a cada sèrie.
+
+let mqttClient = null;
+let nMissatges = 0;
+let pendent = null;          // variable demanada per l'última ordre imrun
+let chartLive = null;
+const seriesLive = {};       // { N: [...], E: [...], Captura: [...] }
+
+const COLORS_LIVE = { N: '#4fc3f7', E: '#f5a623', Captura: '#f06292' };
+
+function mqttEstat(msg, tipus) {
+  document.getElementById('mqtt-estat').textContent = msg;
+  const dot = document.getElementById('mqtt-dot');
+  dot.className = '';
+  if (tipus) dot.classList.add(tipus);
+  const on = tipus === 'ok' || tipus === 'load';
+  document.getElementById('mqtt-connect').disabled = on;
+  document.getElementById('mqtt-disconnect').disabled = !on;
+}
+
+function logMqtt(classe, text) {
+  nMissatges++;
+  document.getElementById('mqtt-count').textContent = `${nMissatges} missatges`;
+  const log = document.getElementById('mqtt-log');
+  const hora = new Date().toLocaleTimeString('ca');
+  const linia = document.createElement('span');
+  linia.className = classe;
+  linia.textContent = `[${hora}] ${text.length > 110 ? text.slice(0, 110) + '…' : text}\n`;
+  log.prepend(linia);
+  while (log.childNodes.length > 200) log.removeChild(log.lastChild);
+}
+
+function mqttConnecta() {
+  const broker = document.getElementById('mqtt-broker').value.trim();
+  const canal = document.getElementById('mqtt-canal').value.trim();
+  mqttEstat('connectant…', 'load');
+
+  mqttClient = mqtt.connect(broker, {
+    clientId: 'dashboard-g11c-' + Math.random().toString(16).slice(2, 8),
+    clean: true, connectTimeout: 8000, reconnectPeriod: 4000
+  });
+
+  mqttClient.on('connect', () => {
+    mqttEstat(`connectat · name/${canal}/#`, 'ok');
+    logMqtt('t-info', `connectat a ${broker}`);
+    mqttClient.subscribe([`name/${canal}/imrun`, `name/${canal}/imresp`]);
+  });
+
+  mqttClient.on('message', (topic, payload) => {
+    const text = payload.toString();
+    if (topic.endsWith('/imrun')) rebutImrun(text);
+    else rebutImresp(text);
+  });
+
+  mqttClient.on('error', e => { mqttEstat('error: ' + e.message, 'err'); });
+  mqttClient.on('close', () => {
+    if (mqttClient) mqttEstat('desconnectat', '');
+  });
+}
+
+function mqttDesconnecta() {
+  if (mqttClient) { const c = mqttClient; mqttClient = null; c.end(true); }
+  mqttEstat('desconnectat', '');
+  logMqtt('t-info', 'desconnectat per l\'usuari');
+}
+
+function rebutImrun(text) {
+  logMqtt('t-run', '→ imrun: ' + text.replace(/\s+/g, ' '));
+
+  // setValue(findName('q'), 0.003) → mostra l'escenari en curs
+  const sv = text.match(/setValue\(findName\('([^']+)'\),\s*([\d.eE+-]+)/);
+  if (sv) {
+    const chip = document.getElementById('escenari-chip');
+    chip.style.display = '';
+    chip.textContent = `escenari: ${sv[1]} = ${sv[2]}`;
+  }
+
+  // window.imres.value(findName('N')) → la propera resposta serà la sèrie de N
+  const gv = text.match(/imres\.value\(findName\('([^']+)'\)\)/);
+  pendent = gv ? gv[1] : null;
+
+  // una nova runModel comença una simulació nova → buida les sèries
+  if (/runModel\s*\(/.test(text)) {
+    Object.keys(seriesLive).forEach(k => delete seriesLive[k]);
+    actualitzaChartLive();
+  }
+}
+
+function rebutImresp(text) {
+  if (text === 'done') {
+    logMqtt('t-resp', '← imresp: done (simulació acabada)');
+    return;
+  }
+  logMqtt('t-resp', '← imresp: ' + text);
+
+  if (pendent) {
+    const valors = text.replace(/[\[\]"]/g, '').split(',')
+      .map(Number).filter(Number.isFinite);
+    if (valors.length) {
+      seriesLive[pendent] = valors;
+      actualitzaChartLive();
+    }
+    pendent = null;
+  }
+}
+
+function liveNeteja() {
+  Object.keys(seriesLive).forEach(k => delete seriesLive[k]);
+  document.getElementById('mqtt-log').textContent = '';
+  document.getElementById('escenari-chip').style.display = 'none';
+  nMissatges = 0;
+  document.getElementById('mqtt-count').textContent = '0 missatges';
+  actualitzaChartLive();
+}
+
+function actualitzaChartLive() {
+  const claus = Object.keys(seriesLive);
+  const llarg = Math.max(0, ...claus.map(k => seriesLive[k].length));
+  const labels = Array.from({ length: llarg }, (_, i) => i);
+
+  const datasets = claus.map(k => ({
+    label: k + '(t)',
+    data: seriesLive[k],
+    borderColor: COLORS_LIVE[k] || '#7aaa96',
+    backgroundColor: (COLORS_LIVE[k] || '#7aaa96') + '20',
+    tension: 0.25, pointRadius: 0, borderWidth: 2,
+    yAxisID: k === 'N' ? 'yN' : 'yAltres'
+  }));
+
+  if (chartLive) chartLive.destroy();
+  chartLive = new Chart(document.getElementById('chart-live').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { labels: { color: '#7aaa96', font: { family: "'JetBrains Mono', monospace", size: 11 } } },
+        title: {
+          display: true, color: '#4a6358',
+          font: { family: "'JetBrains Mono', monospace", size: 11 },
+          text: datasets.length ? 'ÚLTIMA SIMULACIÓ — TRAJECTÒRIES' : 'ÚLTIMA SIMULACIÓ — esperant dades del canal…'
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4a6358', maxTicksLimit: 10 }, grid: { color: '#1e2e26' },
+             title: { display: true, text: 't (passos)', color: '#4a6358', font: { size: 10 } } },
+        yN: { type: 'linear', position: 'left',
+              ticks: { color: '#4fc3f7' }, grid: { color: '#1e2e26' },
+              title: { display: true, text: 'N', color: '#4fc3f7', font: { size: 10 } } },
+        yAltres: { type: 'linear', position: 'right',
+                   ticks: { color: '#f5a623' }, grid: { drawOnChartArea: false },
+                   title: { display: true, text: 'E · Captura', color: '#f5a623', font: { size: 10 } } }
+      }
+    }
+  });
+}
+
 // ─── ARRENCADA ──────────────────────────────────────────────────────────────
 carregar();
+actualitzaChartLive();
+
+// ?mqtt=auto[&canal=g11c] connecta automàticament la telemetria en obrir
+// (ho usa control.html perquè la sala de control arrenqui ja connectada)
+const params = new URLSearchParams(location.search);
+if (params.get('mqtt') === 'auto') {
+  if (params.get('canal')) document.getElementById('mqtt-canal').value = params.get('canal');
+  mqttConnecta();
+}
 </script>
 </body>
 </html>
