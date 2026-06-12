@@ -303,8 +303,10 @@
 
 <script>
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-// URL de l'Apps Script que escriu i llegeix el full G11C
-const SHEET_URL = "https://script.google.com/macros/s/AKfycby8ct5868QjqkIGq6p0F4RPOg_Eucr4Dgytt67k4NBQyq3OT2KjNpka2YwuU0Gx9C7x/exec";
+// Full de càlcul compartit del grup (on Snap! escriu via l'Apps Script).
+// Llegim directament del document amb l'API gviz de Google Sheets en mode
+// JSONP (script tag), que funciona també obrint aquest fitxer en local (file://).
+const SHEET_ID   = "17cowZNht7jDMOyQmspHxtS7xQ7Yh7EnD39UOF1pBJdI";
 const SHEET_NAME = "G11C";
 const RANG = "A2:E200";   // llegim fins a la fila 200; les files buides s'ignoren
 
@@ -323,111 +325,71 @@ function estat(msg, tipus) {
 }
 
 // ─── PARSE ─────────────────────────────────────────────────────────────────
-// L'Apps Script retorna el text de la cel·la; el GET del rang retorna CSV o
-// JSON depenent de com estigui configurat. Aquí suportem tant JSON com CSV.
-function parseResposta(text) {
-  text = text.trim();
-  let files;
-
-  // Intent 1: JSON array of arrays
-  if (text.startsWith('[') || text.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(text);
-      // Si és [[fila1], [fila2], ...] directament
-      if (Array.isArray(parsed) && Array.isArray(parsed[0])) {
-        files = parsed;
-      }
-      // Si és {values: [[...]]} (format Sheets API)
-      else if (parsed.values) {
-        files = parsed.values;
-      }
-      // Si és un array d'objectes (rar, però possible)
-      else if (Array.isArray(parsed) && typeof parsed[0] === 'object') {
-        return parsed.map(r => ({
-          param: r.Parametre || r.A || '',
-          valor: parseFloat(r.Valor || r.B) || 0,
-          n:     parseFloat(r['N*'] || r.C) || 0,
-          e:     parseFloat(r['E*'] || r.D) || 0,
-          captura: parseFloat(r['Captura*'] || r.E) || 0
-        })).filter(r => r.param);
-      }
-    } catch(e) {
-      files = null;
-    }
-  }
-
-  // Intent 2: CSV / text pla (una fila per línia, columnes separades per comes)
-  if (!files) {
-    files = text.split('\n')
-      .map(l => l.trim().split(','))
-      .filter(r => r.length >= 5 && r[0].trim());
-  }
-
-  return files
+// Resposta gviz: {table: {rows: [{c: [{v:...}, ...]}, ...]}}
+// Columnes del full G11C: A=Variable modificada · B=Valor · C=N* · D=E* · E=Captura*
+function parseGviz(taula) {
+  const cel = (fila, i) => (fila.c && fila.c[i] && fila.c[i].v != null) ? fila.c[i].v : '';
+  return (taula.rows || [])
     .map(r => ({
-      param:   String(r[0] || '').trim(),
-      valor:   parseFloat(r[1]) || 0,
-      n:       parseFloat(r[2]) || 0,
-      e:       parseFloat(r[3]) || 0,
-      captura: parseFloat(r[4]) || 0
+      param:   String(cel(r, 0)).trim(),
+      valor:   parseFloat(cel(r, 1)) || 0,
+      n:       parseFloat(cel(r, 2)) || 0,
+      e:       parseFloat(cel(r, 3)) || 0,
+      captura: parseFloat(cel(r, 4)) || 0
     }))
-    .filter(r => r.param && r.param !== 'Parametre');
+    .filter(r => r.param && r.param !== 'Parametre' && r.param !== 'Variable modificada'
+                 && r.param !== 'Prova');   // 'Prova' és la fila de test de la connexió
 }
 
-// ─── FETCH DADES ────────────────────────────────────────────────────────────
-async function carregar() {
+// ─── CARREGAR DADES (JSONP via script tag — evita CORS, funciona en file://) ─
+let jsonpTimeout = null;
+
+window.handleGviz = function(resposta) {
+  clearTimeout(jsonpTimeout);
+
+  if (!resposta || !resposta.table) {
+    estat('Resposta inesperada de Google Sheets.', 'err');
+    mostrarBuit();
+    return;
+  }
+
+  totesDades = parseGviz(resposta.table);
+
+  if (totesDades.length === 0) {
+    estat('Full G11C buit — executa el bucle de Snap! per omplir-lo.', 'err');
+    mostrarBuit();
+    return;
+  }
+
+  estat(`${totesDades.length} files carregades del full G11C · actualitzat ${new Date().toLocaleTimeString('ca')}`, 'ok');
+  construirUI();
+};
+
+function carregar() {
   estat('Connectant a Google Sheets…', 'load');
 
-  const url = `${SHEET_URL}?op=get&cell=${SHEET_NAME}!${RANG}`;
+  // Esborra l'script de la càrrega anterior, si n'hi ha
+  const vell = document.getElementById('gviz-jsonp');
+  if (vell) vell.remove();
 
-  try {
-    const resp = await fetch(url, { cache: 'no-store' });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const text = await resp.text();
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+              `?tqx=out:json;responseHandler:handleGviz` +
+              `&sheet=${SHEET_NAME}&range=${RANG}&_=${Date.now()}`;
 
-    if (!text || text.trim().length < 3) {
-      // Full buit però accessibe
-      estat('Full G11C buit — executa el bucle de Snap! per omplir-lo.', 'err');
-      mostrarBuit();
-      return;
-    }
+  const s = document.createElement('script');
+  s.id = 'gviz-jsonp';
+  s.src = url;
+  s.onerror = () => {
+    clearTimeout(jsonpTimeout);
+    estat('No s\'ha pogut llegir el full (xarxa o permisos). Comprova que el document sigui públic.', 'err');
+    mostrarBuit();
+  };
+  document.body.appendChild(s);
 
-    totesDades = parseResposta(text);
-
-    if (totesDades.length === 0) {
-      estat('Cap dada reconeguda al rang A2:E200. Comprova el format del full.', 'err');
-      mostrarBuit();
-      return;
-    }
-
-    estat(`${totesDades.length} files carregades · actualitzat ${new Date().toLocaleTimeString('ca')}`, 'ok');
-    construirUI();
-
-  } catch (err) {
-    // CORS o xarxa
-    estat('No s\'ha pogut llegir el full (CORS o error de xarxa). Usant dades de mostra.', 'err');
-    usarDadesMostra();
-  }
-}
-
-// ─── DADES DE MOSTRA (fallback quan hi ha CORS) ────────────────────────────
-function usarDadesMostra() {
-  totesDades = [
-    {param:'q', valor:0.003, n:850, e:45,  captura:114.7},
-    {param:'q', valor:0.006, n:720, e:60,  captura:259.2},
-    {param:'q', valor:0.01,  n:600, e:80,  captura:480.0},
-    {param:'q', valor:0.02,  n:410, e:110, captura:902.0},
-    {param:'q', valor:0.05,  n:180, e:140, captura:1260.0},
-    {param:'alpha', valor:0.01, n:590, e:75, captura:442.5},
-    {param:'alpha', valor:0.1,  n:600, e:80, captura:480.0},
-    {param:'alpha', valor:0.5,  n:610, e:85, captura:518.5},
-    {param:'alpha', valor:1.0,  n:620, e:90, captura:558.0},
-    {param:'Q_max', valor:80,  n:650, e:40, captura:80.0},
-    {param:'Q_max', valor:100, n:630, e:50, captura:100.0},
-    {param:'Q_max', valor:125, n:610, e:62, captura:125.0},
-    {param:'Q_max', valor:200, n:550, e:95, captura:200.0},
-  ];
-  construirUI();
+  jsonpTimeout = setTimeout(() => {
+    estat('Google Sheets no respon (temps esgotat).', 'err');
+    mostrarBuit();
+  }, 15000);
 }
 
 // ─── MOSTRAR BUIT ───────────────────────────────────────────────────────────
