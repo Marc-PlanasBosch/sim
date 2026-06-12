@@ -36,8 +36,11 @@
 <body>
   <div class="split" id="split">
     <div class="pane">
-      <!-- Snap!: un cop obert, File -> Import del nostre SIM_LAB05_G11C.xml -->
-      <iframe src="https://snap.berkeley.edu/snap/snap.html" allow="clipboard-read; clipboard-write"></iframe>
+      <!-- Snap! carrega el projecte automaticament via #open: (com fa el
+           professor amb el seu mm2.xml). GitHub Pages serveix el XML amb
+           CORS obert. Si s'obre control.html en local, Snap! no podra
+           recuperar el fitxer: en aquest cas File -> Import manual. -->
+      <iframe id="snap-frame" allow="clipboard-read; clipboard-write"></iframe>
     </div>
     <div class="divider" id="divider" aria-label="Separador"></div>
     <div class="pane">
@@ -46,6 +49,20 @@
   </div>
 
   <script>
+    // Si la pagina esta servida per https (GitHub Pages), Snap! pot carregar
+    // el projecte directament via #open:<url del xml en aquest mateix lloc>.
+    // En local (file:// o http://localhost) snap.berkeley.edu no pot recuperar
+    // el fitxer (contingut mixt), aixi que es carrega Snap! buit i es fa
+    // File -> Import manualment.
+    const snapFrame = document.getElementById('snap-frame');
+    const SNAP = 'https://snap.berkeley.edu/snap/snap.html';
+    if (location.protocol === 'https:') {
+      const xmlUrl = new URL('SIM_LAB05_G11C.xml', location.href).href;
+      snapFrame.src = `${SNAP}#open:${xmlUrl}`;
+    } else {
+      snapFrame.src = SNAP;
+    }
+
     const split = document.getElementById('split');
     const divider = document.getElementById('divider');
     const gutter = 8, minPane = 220;
